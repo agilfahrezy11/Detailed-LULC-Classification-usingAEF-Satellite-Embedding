@@ -17,10 +17,9 @@ def get_sat_embedding(aoi, start_year, end_year):
 
      image = dataset\
         .filterDate(f'{start_year}-01-01', f'{end_year}-01-01') \
-         .filterBounds(aoi)\
-         .median()\
-        .clip(aoi)
-     return image
+         .filterBounds(aoi)
+     mosaicked = image.mosaic().clip(aoi)
+     return mosaicked
 
 def extract_pixel_value(image, roi, class_property, scale=10, split_ratio = 0.5, tile_scale = 16):
      """
