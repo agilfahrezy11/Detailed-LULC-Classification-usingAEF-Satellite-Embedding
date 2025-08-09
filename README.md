@@ -123,6 +123,81 @@ train_samples, test_samples = extract_pixel_value(
 )
 ```
 ## Hyperparameter optimization
-One of the most crucial part of machine learning workflow is finding the most optimal paramaters for any given task. The optimal paramater combination ensure that the model captured the pattern of the data, ensuring robust and scalabel learning. The Google Earth Engine used the Statistical Machine Intelligence Learning (SMILE) which is a javascript library for conducting various machine learning related task. 
+One of the most crucial part of machine learning workflow is finding the most optimal paramaters for any given task. Choosing the right parameter values ensures that the model captures meaningful patterns in the data, leading to robust and scalable predictions. The Google Earth Engine machine learning algorithms are implemented through the Statistical Machine Intelligence and Learning Engine (SMILE) — a JavaScript-based library for classification, regression, and clustering tasks. Unlike libraries such as Scikit-learn, SMILE does not provide built-in utilities for automated hyperparameter search (e.g., GridSearchCV). As a result, hyperparameter optimization in GEE requires a manual search approach, which consist of fallowing steps:
+
+1. Define a set of possible parameter combinations
+2. Train and evaluate a model for each combination
+3. Compare performance metrics 
+4. Select the combination that yields the best results
+
+This repository implements a helper function to streamline the process, allowing you to systematically test different parameter configurations and identify the most effective setup for your LULC classification task.
+```python
+def rf_tuning(train, test, band_names, class_property, n_tree_list, var_split_list, min_leaf_pop_list):
+         for n_tree in n_tree_list:
+          for var_split in var_split_list:
+               for min_leaf_pop in min_leaf_pop_list:
+                  try:
+                    #initialize the random forest classifer
+                    clf = ee.Classifier.smileRandomForest(
+                         numberOfTrees=n_tree,
+                         variablesPerSplit=var_split,
+                         minLeafPopulation = min_leaf_pop,
+                         seed=0
+                    ).train(
+                        features=train,
+                        classProperty=class_property,
+                        inputProperties=band_names
+                    )
+                     #Used partitioned test data, to evaluate the trained model
+                    classified_test = test.classify(clf)
+                    #test using error matrix
+                    error_matrix = classified_test.errorMatrix(class_property, 'classification')
+                    #append the result of the test
+                    accuracy = error_matrix.accuracy().getInfo()
+                    result.append({
+                        'numberOfTrees': n_tree,
+                        'variablesPerSplit': var_split,
+                        'MinimumleafPopulation0':min_leaf_pop,
+                        'accuracy': accuracy
+                    })
+                    #print the message if error occur
+                  except Exception as e:
+                    print(f"Failed for Trees={n_tree}, Variable Split={var_split}, mininum leaf population = {min_leaf_pop}")
+                    print(e)
+               return result
+```
+Example Usage:
+
+```python
+#Parameter space
+num_trees = [100, 200, 300]
+var_split = [1,2,3,8,11,15]
+min_leaf_pop = [1,2,3, 5, 9, 11]
+#apply the function
+results_rf = rf_tuning(
+    train=train_samples, #Training data, with pixel value
+    test=test_samples, #testingd data with pixel value
+    band_names=image_2024.bandNames(), #band names 
+    class_property='LUCID', #class labels
+    n_tree_list=num_trees, #tree parameter space
+    var_split_list=var_split, #variable split space
+    min_leaf_pop_list=min_leaf_pop #minimum leaf pop space
+)
+```
+
+In this example, three hyperparameters were tested: number of trees, number of variables selected at each split, and minimum leaf population. One important caveat is that increasing the number of parameters or the range of values tested will significantly increase computation time. To inspect the best parameters combination we could use the following code:
+```Python
+#convert the result into panda data frame
+df_rf = pd.DataFrame(results_rf)
+df_rf = df_rf.sort_values(by='accuracy', ascending=False)
+print(df_rf.head())
+#get the best parameters and accuracy
+best_result = df_rf.iloc[0]
+print("Best Hyperparameters:")
+print(f"- Accuracy: {best_result['accuracy']:.3f}")
+print(f"- numberOfTrees: {best_result['numberOfTrees']}")
+print(f"- variablesPerSplit: {best_result['variablesPerSplit']}")
+print(f"- Minimum number of leaf population: {best_result ['MinimumleafPopulation0']}")
+```
 
 
