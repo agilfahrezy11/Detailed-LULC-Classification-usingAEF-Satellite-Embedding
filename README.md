@@ -123,5 +123,6 @@ train_samples, test_samples = extract_pixel_value(
 )
 ```
 ## Hyperparameter optimization
+One of the most crucial part of machine learning workflow is finding the most optimal paramaters for any given task. The optimal paramater combination ensure that the model captured the pattern of the data, ensuring robust and scalabel learning. The Google Earth Engine used the Statistical Machine Intelligence Learning (SMILE) which is a javascript library for conducting various machine learning related task. 
 
 
