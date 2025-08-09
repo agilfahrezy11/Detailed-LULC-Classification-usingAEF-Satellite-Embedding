@@ -60,7 +60,7 @@ vis_params = {'min': -0.3, 'max': 0.3,
 Here are the result of the visualization of the satellite embedding dataset from the previous code
 
 <p align="center">
-  <img src="/assets/image.png" width="600" alt="Satellite Embedding Visualization">
+  <img src="/assets/embed_vis.png" width="600" alt="Satellite Embedding Visualization">
 </p>
 
 ## Training Data
@@ -200,4 +200,86 @@ print(f"- variablesPerSplit: {best_result['variablesPerSplit']}")
 print(f"- Minimum number of leaf population: {best_result ['MinimumleafPopulation0']}")
 ```
 
+Here are the result of the hyperparameter optimization:
+
+<p align="center">
+  <img src="/assets/image.png" width="600" alt="Satellite Embedding Visualization">
+</p>
+
+As we can see, the combination of 100 tree, 1 variable split, and 2 minimum popluation, resulted in an accuracy 89%, which can be considered substantial. 
+
+## Applied the best parameters and classified the imagery
+
+Next, we applied these parameters for classifying the whole imagery using the following code:
+
+```python
+#get the best parameters
+best_ntree = int(best_result['numberOfTrees'])
+best_vsplit = int(best_result['variablesPerSplit'])
+best_min_leaf = int(best_result['MinimumleafPopulation0'])
+#apply the best parameters, and trained the model
+final_classifier = ee.Classifier.smileRandomForest(
+    numberOfTrees=best_ntree,
+    variablesPerSplit=best_vsplit,
+    minLeafPopulation=best_min_leaf
+).train(
+    features=train_samples,
+    classProperty='LUCID',
+    inputProperties=image_2024.bandNames()
+)
+#apply the trained model into the whole image
+lulc_map = image_2024.classify(final_classifier)
+```
+To visualize the classified result, we can use the following code:
+
+```python
+legend_21 = [
+    'Settlement Build-up', 'Non-settlement Build-up', 'Volcanic Rock and Sand', 'Lowland Forest',
+    'Upland Forest', 'Mangrove Forest', 'Marine Sand', 'Herbs and Grassland', 'Production Forest',
+    'Aquaculture', 'Dryland Agriculture', 'Natural Fallow Land', 'Man-made Fallow Land', 'Rubber and Other Hardwood Plantation',
+    'Ocean Waters','Oil Palm Plantatation','Tea Plantation', 'Bushes and Shrubs', 'Rivers', 'Wetland Agriculture',
+    'Natural/Semi Natural Freshwaterbody'
+]
+
+legend_colors = [
+    '#FF0000', '#e97421', '#7b3531', '#2e8b57', '#228b22', '#7fffd4', '#fdd9b5',
+    '#c1e1c1', '#9acd32', '#ccccff', '#f5ff00', '#b5a642', '#cc8899', '#32cd32',
+    '#1f52dc', '#808000', '#98d97d', '#008080', '#87ceeb', '#afb325', '#0f3c5e'
+]
+Map = geemap.Map()
+
+# Visualization
+vis_params = {
+    'min': 0,
+    'max': len(legend_colors) - 1,
+    'palette': legend_colors
+}
+Map.centerObject(aoi, 10)
+Map.addLayer(lulc_map, vis_params, 'Classified Map')
+# Add legend
+Map.add_legend(title='Land Cover Legend', labels=legend_21, colors=legend_colors)
+Map
+```
+## Exporting the result
+If you're not satisfied with the visual representation of the land cover land use class, you can export the result to google drive and download the tiff file. To do this, you can use the following code:
+```python
+export_task = ee.batch.Export.image.toDrive(
+    image=lulc_map,
+    description='Update_RF_LC_sat_embed',
+    folder='Earth Engine',
+    fileNamePrefix='Update_RF_LC_sat_embed',
+    scale=10,
+    region=image_2024.geometry(),  # or aoi.geometry()
+    maxPixels=1e13
+)
+#Monitored the progress
+export_task.start()
+import time
+
+while export_task.active():
+    print('Exporting... (status: {})'.format(export_task.status()['state']))
+    time.sleep(10)
+
+print('Export complete (status: {})'.format(export_task.status()['state']))
+```
 
