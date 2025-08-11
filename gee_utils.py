@@ -17,7 +17,8 @@ def get_sat_embedding(aoi, start_year, end_year):
 
      image = dataset\
         .filterDate(f'{start_year}-01-01', f'{end_year}-01-01') \
-         .filterBounds(aoi)
+        .filterBounds(aoi)
+    
      mosaicked = image.mosaic().clip(aoi)
      return mosaicked
 
@@ -87,16 +88,19 @@ def rf_tuning(train, test, band_names, class_property, n_tree_list, var_split_li
                     #test using error matrix
                     error_matrix = classified_test.errorMatrix(class_property, 'classification')
                     #append the result of the test
-                    accuracy = error_matrix.accuracy().getInfo()
-                    result.append({
+                    accuracy = error_matrix.accuracy()
+                    result.append(ee.Dictionary({
                         'numberOfTrees': n_tree,
                         'variablesPerSplit': var_split,
                         'MinimumleafPopulation0':min_leaf_pop,
                         'accuracy': accuracy
-                    })
+                    }))
+                    result = ee.List(result).getInfo()  # Single request  
                     #print the message if error occur
+                    
                   except Exception as e:
                     print(f"Failed for Trees={n_tree}, Variable Split={var_split}, mininum leaf population = {min_leaf_pop}")
                     print(e)
-               return result
+                    
+     return result
 
