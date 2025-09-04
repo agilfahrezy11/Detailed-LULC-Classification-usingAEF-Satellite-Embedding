@@ -69,57 +69,62 @@ For this project, I used 700 labeled polygons (≈13,000 pixels) prepared throug
 To prepare the data for classification and hyperparameter optimization, I created a helper function that:
 
 * Automatically extracts pixel values from the embedding image based on predefined Regions of Interest (ROI)
-* Randomly splits the data into training and testing sets
-
-This ensures reproducible sampling and flexible control over the split ratio.
-The function is available in gee_utils.py.
+* Instead single randomly splits the data into training and testing sets, i decided to used stratified random split, mimicking the train test split approach in scikit learn library. 
+This ensures reproducible sampling and flexible control over the split ratio, as well as maintaining an ideal proportion between different class size. This function is nested under feature extraction class.
 ```python
-def extract_pixel_value(image, roi, class_property, scale=10, split_ratio = 0.5, tile_scale = 16):
-     """
-     extract the pixels value for supervised classification based on pre defined regions of interest (ROI) and
-     partitioned the data into training and testing
-     Parameters:
-        image (ee.Image)
-        Region of interest/ROI (feature collection)
-        class_property/class_label
-        scale(int), based on spatial resolution of the data
-        split_ratio (float)
-        tile_scale
-     Returns:
-        tuple: (training_samples, testing_samples)
-     """
-     #create a random column
-     roi_random = roi.randomColumn()
-     #partioned the original training data
-     training = roi_random.filter(ee.Filter.lt('random', split_ratio))
-     testing = roi_random.filter(ee.Filter.gte('random', split_ratio))
-     #extract the pixel values
-     training_pixels = image.sampleRegions(
-                        collection=training,
-                        properties = [class_property],
-                        scale = scale,
-                        tileScale = tile_scale 
-     )
-     testing_pixels = image.sampleRegions(
-                        collection=testing,
-                        properties = [class_property],
-                        scale = scale,
-                        tileScale = tile_scale 
-     )
-     return training_pixels, testing_pixels
+ def stratified_split (self, roi, image, class_prop, pixel_size= 10, train_ratio = 0.7, seed=0):
+        """
+        Used stratified random split to partitioned the original sample data into training and testing data used for model development
+        Args:
+            Split the region of interest using a stratified random approach, which use class label as basis for splitting
+            roi: ee.FeatureCollection (original region of interest)
+            class_prop: Class property (column) contain unique class ID
+            tran_ratio: ratio for train-test split (usually 70% for training and 50% for testing)
+        Return:
+        ee.FeatureCollection, consist of training and testing data
+        
+        """
+        #Define the unique class id using aggregate array
+        classes = roi.aggregate_array(class_prop).distinct()
+        #split the region of interest based on the class
+        def split_class (c):
+            subset = (roi.filter(ee.Filter.eq(class_prop, c))
+                    .randomColumn('random', seed=seed))
+            train = (subset.filter(ee.Filter.lt('random', train_ratio))
+                        .map(lambda f: f.set('fraction', 'training')))
+            test = (subset.filter(ee.Filter.gte('random', train_ratio))
+                        .map(lambda f: f.set('fraction', 'testing')))
+            return train.merge(test)
+        #map the function for all the class
+        split_fc = ee.FeatureCollection(classes.map(split_class)).flatten()
+        #filter for training and testing
+        train_fc = split_fc.filter(ee.Filter.eq('fraction', 'training'))
+        test_fc = split_fc.filter(ee.Filter.eq('fraction', 'testing'))
+        print('Stratified Random Split Training Pixel Size:', train_fc.size().getInfo())
+        print('Stratified Random Split Testing Pixel Size:', test_fc.size().getInfo())      
+        #sample the image based stratified split data
+        train_pix = image.sampleRegions(
+                            collection=train_fc,
+                            properties = [class_prop],
+                            scale = pixel_size,
+                            tileScale = 16)
+        test_pix = image.sampleRegions(
+                            collection = test_fc,
+                            properties = [class_prop],
+                            scale = pixel_size,
+                            tileScale = 16
+        )
+  
+        return train_pix, test_pix
 ```
-Example usage:
+Below is the example implementation of the function. I used 60-40 train test ratio in order to produce more statistically robust testing dataset
 ```python
 # defining the training data
 labeled_roi = ee.FeatureCollection('projects/ee-agilakbar/assets/LULC_Training_data_Garsel_project')
-# partitioned the ROI into training and testing data, then extract the pixel values (sample regions)
-train_samples, test_samples = extract_pixel_value(
-    image=image_2024,
-    roi=labeled_roi,
-    class_property='LUCID',
-    scale=10,
-    split_ratio=0.7,
-    tile_scale=16
+get_samples = FeatureExtraction()
+train_samples, test_samples = get_samples.stratified_split(roi=labeled_roi, 
+                                                           image=image_2024,class_prop='LUCID',
+                                                            pixel_size=10, train_ratio=0.6
 )
 ```
 ## Hyperparameter optimization
